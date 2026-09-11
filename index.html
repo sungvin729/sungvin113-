@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>박성빈 때리기 게임</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1e1e2f, #111119);
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            margin: 10px 0;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+        }
+
+        .dashboard {
+            display: flex;
+            gap: 20px;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .hp-bar-container {
+            width: 300px;
+            height: 25px;
+            background-color: #444;
+            border-radius: 15px;
+            border: 2px solid #fff;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .hp-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff4e50, #f9d423);
+            transition: width 0.1s ease;
+        }
+
+        .game-area {
+            position: relative;
+            width: 300px;
+            height: 350px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 캐릭터 스타일 (이미지가 없을 경우 기본 캐릭터 사용) */
+        .target {
+            width: 200px;
+            height: 200px;
+            background-color: #ffcc99;
+            border-radius: 50%;
+            position: relative;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            transition: transform 0.05s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 얼굴 이목구비 */
+        .eyes {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 20px;
+        }
+        .eye {
+            width: 20px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 50%;
+            position: relative;
+        }
+        .mouth {
+            width: 60px;
+            height: 10px;
+            background-color: #a00;
+            border-radius: 5px;
+        }
+
+        /* 타격 시 흔들림 애니메이션 */
+        .hit {
+            animation: shake 0.1s ease-in-out;
+            background-color: #ff9999 !important;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(-15px, 5px) rotate(-10deg); }
+            50% { transform: translate(15px, -5px) rotate(10deg); }
+            75% { transform: translate(-10px, -5px) rotate(-5deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+
+        /* 클릭 시 튀어나오는 데미지 텍스트 */
+        .damage-pop {
+            position: absolute;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #ff3333;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+            animation: floatUp 0.6s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-80px) scale(1.5);
+            }
+        }
+
+        /* KO 메시지 */
+        .ko-overlay {
+            position: absolute;
+            font-size: 4rem;
+            font-weight: 900;
+            color: #ff0000;
+            text-shadow: 4px 4px 0 #fff;
+            display: none;
+            z-index: 10;
+            animation: zoomIn 0.3s ease-out;
+        }
+
+        @keyframes zoomIn {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+
+        .info {
+            margin-top: 20px;
+            color: #888;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>박성빈 때리기</h1>
+
+    <div class="dashboard">
+        <div>점수: <span id="score">0</span></div>
+        <div>콤보: <span id="combo">0</span></div>
+    </div>
+
+    <div class="hp-bar-container">
+        <div class="hp-bar" id="hpBar"></div>
+    </div>
+
+    <div class="game-area">
+        <div class="ko-overlay" id="koText">K.O!</div>
+        <!-- 타겟 캐릭터 (박성빈) -->
+        <div class="target" id="target">
+            <div class="eyes">
+                <div class="eye" id="leftEye"></div>
+                <div class="eye" id="rightEye"></div>
+            </div>
+            <div class="mouth" id="mouth"></div>
+        </div>
+    </div>
+
+    <div class="info">얼굴을 마구 클릭하여 콤보를 이어가세요!</div>
+
+    <script>
+        let score = 0;
+        let combo = 0;
+        let maxHp = 100;
+        let currentHp = maxHp;
+        let comboTimer = null;
+
+        const target = document.getElementById('target');
+        const hpBar = document.getElementById('hpBar');
+        const scoreEl = document.getElementById('score');
+        const comboEl = document.getElementById('combo');
+        const koText = document.getElementById('koText');
+        const leftEye = document.getElementById('leftEye');
+        const rightEye = document.getElementById('rightEye');
+
+        // 사운드 효과 (Web Audio API 사용)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playHitSound() {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sawtooth';
+            // 콤보가 늘어날수록 소리 톤이 높아짐
+            osc.frequency.setValueAtTime(120 + Math.min(combo * 10, 300), audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // 타격 이벤트 처리
+        target.addEventListener('mousedown', (e) => {
+            if (currentHp <= 0) return;
+
+            // 효과음
+            playHitSound();
+
+            // 콤보 및 점수 계산
+            combo++;
+            score += 10 + (combo * 2);
+            scoreEl.textContent = score;
+            comboEl.textContent = combo;
+
+            // 콤보 타이머 리셋 (1초 내에 안 때리면 콤보 초기화)
+            clearTimeout(comboTimer);
+            comboTimer = setTimeout(() => {
+                combo = 0;
+                comboEl.textContent = combo;
+            }, 1000);
+
+            // 체력 차감
+            currentHp -= 5;
+            if (currentHp < 0) currentHp = 0;
+            hpBar.style.width = (currentHp / maxHp * 100) + '%';
+
+            // 타격 애니메이션 적용
+            target.classList.remove('hit');
+            void target.offsetWidth; // 리플로우 강제 (애니메이션 재실행용)
+            target.classList.add('hit');
+
+            // 데미지 텍스트 팝업 생성
+            createDamagePop(e.clientX, e.clientY);
+
+            // 체력이 떨어졌을 때 표정 변화 (멍든 눈)
+            if (currentHp < 50) {
+                leftEye.style.borderRadius = '0';
+                rightEye.style.borderRadius = '0';
+                leftEye.style.height = '4px';
+                rightEye.style.height = '4px';
+            }
+
+            // KO 판정
+            if (currentHp <= 0) {
+                triggerKO();
+            }
+        });
+
+        // 데미지 팝업 텍스트 생성
+        function createDamagePop(x, y) {
+            const pop = document.createElement('div');
+            pop.className = 'damage-pop';
+            pop.style.left = (x - 20) + 'px';
+            pop.style.top = (y - 50) + 'px';
+            pop.textContent = combo > 5 ? `HIT! +${10 + combo * 2}` : '-5';
+            
+            document.body.appendChild(pop);
+
+            setTimeout(() => {
+                pop.remove();
+            }, 600);
+        }
+
+        // KO 연출 및 게임 리셋
+        function triggerKO() {
+            koText.style.display = 'block';
+            target.style.opacity = '0.3';
+
+            setTimeout(() => {
+                // 게임 상태 리셋
+                currentHp = maxHp;
+                hpBar.style.width = '100%';
+                koText.style.display = 'none';
+                target.style.opacity = '1';
+                
+                // 표정 원복
+                leftEye.style.borderRadius = '50%';
+                rightEye.style.borderRadius = '50%';
+                leftEye.style.height = '20px';
+                rightEye.style.height = '20px';
+            }, 1500);
+        }
+    </script>
+</body>
+</html>
